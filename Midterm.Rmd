@@ -1,0 +1,272 @@
+---
+title: "Midterm"
+author: "Jiawen Qi (jiq10)"
+date: "March 2, 2017"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. PART A
+
+## 1.1 PALocs
+
+### 1.1.1 Map shown the random quadrat count
+
+Here is the Map with Ramdom 10x10 quadrat counts for PALocs shapefile:
+
+![](1.png)
+
+### 1.1.2 Table shown the statistics
+
+```{r results = 'asis', warning=FALSE, tidy=TRUE}
+data <- read.csv(file = "PALocsRandom.csv", header = TRUE, stringsAsFactors = FALSE)
+knitr::kable(data, caption = "Regular Quadrat Count Table")
+```
+
+### 1.1.3 Summary of decision based on VMR
+
+The observed variance s sqaure is `(18.8538 + 5.7717 + 8.8445) / (100 - 1) = 0.3380808`
+
+The ratio of variance to mean `VMR = 0.3380808 / 0.67 = 0.5045982` < 1.0, which means PALocs points are evenly spaced, not clustered.
+
+## 1.2 PACoals
+### 1.2.1 Map shown the random quadrat count
+
+Here is the Map with Ramdom 10x10 quadrat counts for PACoals shapefile:
+
+![](2.png)
+
+### 1.2.2 Table shown the statistics
+
+```{r results = 'asis', warning=FALSE, tidy=TRUE}
+data <- read.csv(file = "PACoalsRandom.csv", header = TRUE, stringsAsFactors = FALSE)
+knitr::kable(data, caption = "Regular Quadrat Count Table")
+```
+
+### 1.2.3 Summary of decision based on VMR
+
+The observed variance s square is `sum(X(K-u)^2) / (100 - 1) = 390359.6 / 99 = 3943.026`
+
+The ratio of variance to mean `VMR = 3943.026 / 41.06 = 96.03083` larger than 1.0, which means PACoals points are clustered.
+
+# 2. PART B
+
+## 2.1 PALocs
+
+### 2.1.1 A plot showing the result of G function
+
+Here is the plot of G function for PALocs shapefile:
+
+![](3.png)
+
+r is the distance, Graw(r) is the uncorrected estimate of G(r), that is the empirical distribution of the distance from each ppint in the pattern to the nearest other point of the pattern.Gpois(r) is the theoretical value of G(r) for a stationary Poisson process of the same estimated intensity.
+
+### 2.1.2 A plot showing the result of F function
+
+![](4.png)
+
+r is the distance, Fraw(r) is the uncorrected estimate of F(r), that is the empirical distribution of the distance from a random point in the window to the nearest point of the data pattern X.
+
+### 2.1.3 A report comparing the results of G and F functions
+
+![](5.png)
+
+G shows how close together events in the pattern are, while F relates to how far events are from arbitrary locations in the study area. 
+
+We allready known that PALocs is in an evenly spaced pattern. Most locations in this pattern are relatively closed to an event, so F rises quickly at low d. However, events are relatively far from each other, so that G initially increases slowly and rises more quickly at longer distancs.
+
+## 2.2 PACoals
+
+### 2.2.1 A plot showing the result of G function
+
+Here is the plot of G function for PACoals shapefile:
+
+![](6.png)
+
+r is the distance, Graw(r) is the uncorrected estimate of G(r), that is the empirical distribution of the distance from each ppint in the pattern to the nearest other point of the pattern.Gpois(r) is the theoretical value of G(r) for a stationary Poisson process of the same estimated intensity.
+
+### 2.2.2 A plot showing the result of F function
+
+Here is the plot of F function for PACoals shapefile:
+
+![](7.png)
+
+r is the distance, Fraw(r) is the uncorrected estimate of F(r), that is the empirical distribution of the distance from a random point in the window to the nearest point of the data pattern X.
+
+### 2.2.3 A report comparing the results of G and F functions
+
+![](8.png)
+
+Don't u think this graph looks weird? This is because in package `spatstat`, for both `Gest()` and `Fest()` function, distance r is a sensible default. We need to evaluate more distances in this problem. So I tried several sequence and finnaly decide to use seq(from = 0.000, to  = 1.000, by = 0.001) for both G and F functions.
+
+Here is the new comparing graph:
+
+![](9.png)
+
+We know that PACoals is in clustered in the study area. So, if events are clustered, G rises sharply at short distances because many events have a very close nearest neighbor. The F function rises slowly at first and rapidly at longer distances because a good proportion of study area is fairly empty, so that many locations are at quite long distances from the nearest event in the pattern.
+
+# 3. Code with comment
+
+```{r, results='hide', warning=FALSE, tidy=TRUE}
+##### Libraries for Midterm script #####
+library(rgdal) # Bindings for the geospatial data abstraction library.
+library(maptools) # Tools for Reading and Handling Spatial Objects
+library(spatstat) # Spatial Point Pattern Analysis, Model-Fitting, Simulation, Tests
+
+##### 1. PART A #####
+
+##### 1.1 PALocs #####
+getwd() # get the working directory
+list.files() # List the Files in a Directory
+PALocs <- readOGR(dsn = "/Users/qijiawen/Desktop/2017 Spring/Spatial Data Analytics/Midterm", layer = "PALocs") # read PALocs shapefile
+summary(PALocs) # get a summary of PALocs dataset: 67 points in total with 20 variables
+PALocs.spatialPoints <- as(PALocs,'SpatialPoints') # change spatial points data frame to Spatial Points
+PALocs.ppp <- as(PALocs.spatialPoints,'ppp') # change spatial points to spatial point pattern class ppp
+coords <- as.data.frame(PALocs@coords) # get the coords table
+x.max <- max(coords$coords.x1)  # max for x
+x.min <- min(coords$coords.x1)  # min for y
+y.max <- max(coords$coords.x2)  # max for y
+y.min <- min(coords$coords.x2)  # max for x
+# I will use 10x10 = 100 quadrats 
+quadratLength <- (x.max-x.min)/10 # the same length as regular
+quadratWidth <- (y.max-y.min)/10 # the same width as regular
+set.seed(1) ## to get same result, my favorite seed
+randomX <- runif(100, min = x.min, max = x.max - quadratLength) # generate 100 random x
+randomY <- runif(100, min = y.min + quadratWidth, max = y.max) # generate 100 random y
+randomQuadratCount.PALocs <- matrix() # create a matrix to save counts
+# count the number of event for each random quadrat
+for (i in 1:100) {
+  # get four cornor coordinates
+  x.left = randomX[i]
+  x.right = randomX[i] + quadratLength
+  y.top = randomY[i]
+  y.bottom = randomY[i] - quadratWidth
+  # do filters for four sides
+  conditionLeft <- coords[coords$coords.x1 > x.left,]
+  conditionRight <- conditionLeft[conditionLeft$coords.x1 < x.right,]
+  conditionTop <- conditionRight[conditionRight$coords.x2 < y.top,] 
+  conditionBottom <- conditionTop[conditionTop$coords.x2 > y.bottom,]
+  randomQuadratCount.PALocs[i] <- nrow(conditionBottom) # count number of points
+}
+
+##### 1.1.1 Map with random quadrat count #####
+plot(PALocs.ppp, pch = '*', main = "PALocs Random Quadrat Count (100 rectangles)") # plot points as background map
+for (i in 1:100) {
+  rect(xleft = randomX[i], ybottom = randomY[i] - quadratWidth, xright = randomX[i] + quadratLength, ytop = randomY[i], border = "blue") ## draw rectangles
+  text(randomX[i]+0.5*quadratLength, randomY[i]-0.5*quadratWidth, randomQuadratCount.PALocs[i], col = "blue", cex = 0.8) ## add count text
+}
+
+##### 1.1.2 Table with statistics #####
+RandomCountTable <- table(randomQuadratCount.PALocs) ## aggregate and sort
+RandomCountTable <- as.data.frame(RandomCountTable) ## create the table
+colnames(RandomCountTable) <- c("No. of Events (K)", "No. of Quadrats(X)")
+RandomCountTable$`No. of Events (K)` <- as.integer(as.character(RandomCountTable$`No. of Events (K)`)) # change factor to integer
+u = length(PALocs) / 100 # u = 0.67
+RandomCountTable$`K-u` <- RandomCountTable$`No. of Events (K)` - u ## calculate k-u
+RandomCountTable$`(K-u)^2` <- RandomCountTable$`K-u`*RandomCountTable$`K-u` # calculate (K-u)^2
+RandomCountTable$`X(K-u)^2` <- RandomCountTable$`No. of Quadrats(X)`* RandomCountTable$`(K-u)^2` # calculate X(K-u)^2
+write.csv(RandomCountTable, "PALocsRandom.csv", row.names = FALSE)
+
+##### 1.1.3 Summary based on VMR #####
+RandomVariance = sum(RandomCountTable$`X(K-u)^2`)/(100-1) # calculate the variance s^2 # 0.33808
+RandomVMR <- RandomVariance/u # variance mean ratio # 0.50459
+
+##### 1.2 PACoals #####
+PACoals <- readOGR(dsn = "/Users/qijiawen/Desktop/2017 Spring/Spatial Data Analytics/Midterm", layer = "PACoals") # read PACoals shapefile
+summary(PACoals) # get a summary of PACoals dataset: 4106 points in total with 22 variables
+PACoals.spatialPoints <- as(PACoals,'SpatialPoints') # change spatial points data frame to Spatial Points
+PACoals.ppp <- as(PACoals.spatialPoints,'ppp') # change spatial points to spatial point pattern class ppp
+coords <- as.data.frame(PACoals@coords) # get the coords table
+x.max <- max(coords$coords.x1)  # max for x
+x.min <- min(coords$coords.x1)  # min for y
+y.max <- max(coords$coords.x2)  # max for y
+y.min <- min(coords$coords.x2)  # max for x
+# I will use 10x10 = 100 quadrats 
+quadratLength <- (x.max-x.min)/10 # the same length as regular
+quadratWidth <- (y.max-y.min)/10 # the same width as regular
+set.seed(1) ## to get same result, my favorite seed
+randomX <- runif(100, min = x.min, max = x.max - quadratLength) # generate 100 random x
+randomY <- runif(100, min = y.min + quadratWidth, max = y.max) # generate 100 random y
+randomQuadratCount.PACoals <- matrix() # create a matrix to save counts
+# count the number of event for each random quadrat
+for (i in 1:100) {
+  # get four cornor coordinates
+  x.left = randomX[i]
+  x.right = randomX[i] + quadratLength
+  y.top = randomY[i]
+  y.bottom = randomY[i] - quadratWidth
+  # do filters for four sides
+  conditionLeft <- coords[coords$coords.x1 > x.left,]
+  conditionRight <- conditionLeft[conditionLeft$coords.x1 < x.right,]
+  conditionTop <- conditionRight[conditionRight$coords.x2 < y.top,] 
+  conditionBottom <- conditionTop[conditionTop$coords.x2 > y.bottom,]
+  randomQuadratCount.PACoals[i] <- nrow(conditionBottom) # count number of points
+}
+
+##### 1.2.1 Map with random quadrat count #####
+plot(PACoals.ppp, pch = '*', main = "PACoals Random Quadrat Count (100 rectangles)") # plot points as background map
+for (i in 1:100) {
+  rect(xleft = randomX[i], ybottom = randomY[i] - quadratWidth, xright = randomX[i] + quadratLength, ytop = randomY[i], border = "blue") ## draw rectangles
+  text(randomX[i]+0.5*quadratLength, randomY[i]-0.5*quadratWidth, randomQuadratCount.PACoals[i], col = "blue", cex = 0.8) ## add count text
+}
+
+##### 1.2.2 Table with statistics #####
+RandomCountTable <- table(randomQuadratCount.PACoals) ## aggregate and sort
+RandomCountTable <- as.data.frame(RandomCountTable) ## create the table
+colnames(RandomCountTable) <- c("No. of Events (K)", "No. of Quadrats(X)")
+RandomCountTable$`No. of Events (K)` <- as.integer(as.character(RandomCountTable$`No. of Events (K)`)) # change factor to integer
+u = length(PACoals) / 100 # u = 41.06
+RandomCountTable$`K-u` <- RandomCountTable$`No. of Events (K)` - u ## calculate k-u
+RandomCountTable$`(K-u)^2` <- RandomCountTable$`K-u`*RandomCountTable$`K-u` # calculate (K-u)^2
+RandomCountTable$`X(K-u)^2` <- RandomCountTable$`No. of Quadrats(X)`* RandomCountTable$`(K-u)^2` # calculate X(K-u)^2
+write.csv(RandomCountTable, "PACoalsRandom.csv", row.names = FALSE)
+
+##### 1.2.3 Summary based on VMR #####
+RandomVariance = sum(RandomCountTable$`X(K-u)^2`)/(100-1) # calculate the variance s^2 # 3943.0258
+RandomVMR <- RandomVariance/u # variance mean ratio # 96.0308
+
+##### 2. PART B #####
+
+##### 2.1 PALocs #####
+
+##### 2.1.1 A plot showing the result of G function #####
+G <- Gest(PALocs.ppp, correction = "none") # we are not required to do any correction for G function
+plot(G, main = "G function of raw result without correction for PALocs") # plot the G(r)
+
+##### 2.1.2 A plot showing the result of F function #####
+F.function <- Fest(PALocs.ppp, correction = "none") # F function
+plot(F.function, main = "F function of raw result without correction for PALocs", xlim = c(0.0, 0.8), ylim = c(0.0, 1.0)) # plot the F(r)
+
+##### 2.1.3 A report comparing the results of G and F functions #####
+plot(G$r, G$raw, type="l", xlab = "Distance, d", ylab = "F(d), G(d)", main = "Comparing F and G functions for PALocs", col = "blue");par(new=TRUE)
+plot(F.function$r, F.function$raw, type = "l", xlab = "", ylab = "", col = "red")
+legend(0.7,0.2, c("G(d)","F(d)"), lty=c(1,1), lwd=c(2.5,2.5), col=c("blue", "red")) # add a legend
+
+##### 2.2 PACoals #####
+
+##### 2.2.1 A plot showing the result of G function #####
+G <- Gest(PACoals.ppp, correction = "none") # we are not required to do any correction for G function
+plot(G, main = "G function of raw result without correction for PACoals") # plot the G(r)
+
+##### 2.2.2 A plot showing the result of F function #####
+F.function <- Fest(PACoals.ppp, correction = "none") # F function
+plot(F.function, main = "F function of raw result without correction for PACoals") # plot the F(r)
+
+##### 2.2.3 A report comparing the results of G and F functions ####
+plot(G$r, G$raw, type="l", xlab = "Distance, d", ylab = "F(d), G(d)", main = "Comparing F and G functions for PACoals", col = "blue", xlim = c(0.00, 0.08), ylim = c(0.0, 1.0));par(new=TRUE)
+plot(F.function$r, F.function$raw, type = "l", xlab = "", ylab = "", col = "red", xlim = c(0.00, 0.08), ylim = c(0.0, 1.0))
+legend(0.07,0.15, c("G(d)","F(d)"), lty=c(1,1), lwd=c(2.5,2.5), col=c("blue", "red")) # add a legend
+
+##### Important: Check more distances #####
+d = seq(from = 0.000, to  = 1.000, by = 0.001)
+G1 <- Gest(PACoals.ppp, r = d, correction = "none") # add r argument
+plot(G1, main = "G function of raw result without correction for PACoals")
+F.function1 <- Fest(PACoals.ppp, r  = d, correction = "none") # F function
+plot(F.function1, main = "F function of raw result without correction for PACoals") # plot the F(r)
+plot(G1$r, G1$raw, type="l", xlab = "Distance, d", ylab = "F(d), G(d)", main = "Comparing F and G functions for PACoals", col = "blue", xlim = c(0.00, 1.00), ylim = c(0.0, 1.0));par(new=TRUE)
+plot(F.function1$r, F.function1$raw, type = "l", xlab = "", ylab = "", col = "red", xlim = c(0.00, 1.00), ylim = c(0.0, 1.0))
+legend(0.9,0.15, c("G(d)","F(d)"), lty=c(1,1), lwd=c(2.5,2.5), col=c("blue", "red")) # add a legend
+```

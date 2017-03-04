@@ -1,0 +1,201 @@
+---
+title: "Project 2"
+author: "Jiawen Qi (jiq10)"
+date: "February 11, 2017"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Regular (Exhaustive Census) Quadrat Count Method
+
+## 1.0 How Many quadrats should I use?
+
+### 1.0.1 First Try 10 x 10, 100 quadrats
+
+The quadrat count results range from 0 to 15160, the mean quadrat count is 156, 259 / 100 = 1,562.59. The total rows of 'No. of events, K' is 67. Here is the map if I use 10x10:
+
+![](try1.png)
+
+### 1.0.2 Second Try 20 x 20, 400 quadrats
+
+The quadrat count results range from 0 to 6,367, the mean quadrat count is 156, 259 / 400 = 390. The total rows of 'No. of events, K' is 202. Here is the map if I use 20x20:
+
+![](try2.png)
+
+It looks like more detailed than first try.
+
+### 1.0.3 Third Try 30 x 30, 900 quadrats
+
+The quadrat count results range from 0 to 3,961, the mean quadrat count is 156, 259 / 900 = 174. The total rows of 'No. of events, K' is 323. Here is the map if I use 30x30:
+
+![](try3.png)
+
+It looks good, but we can still try more quadrats.
+
+### 1.0.4 Forth Try 40 x 40, 1,600 quadrats
+
+The quadrat count results range from 0 to 2,657, the mean quadrat count is 156, 259 / 1600 = 98. The total rows of 'No. of events, K' is 363. Here is the map if I use 40x40:
+
+![](try4.png)
+
+I think I should stop here, because, although we may get better vmr in the end, the plot of text and rectangles are overlapped. It's not clear enough for us to see the exact count for each quadrat. Therefore, I will use 30x30 quadrats for both regular and random quadrat count later.
+
+## 1.1 Map
+
+![](1.png)
+
+## 1.2 Table
+
+```{r results = 'asis', warning=FALSE, tidy=TRUE}
+data <- read.csv(file = "Regular.csv", header = TRUE, stringsAsFactors = FALSE)
+knitr::kable(data, caption = "Regular Quadrat Count Table")
+```
+
+## 1.3 Summary Report
+
+VMR for regular quadrat count method is around 793.45, which is much amazingly greater than 1.0. Which means the points in this pattern is strongly clustered.
+
+# 2. Random Sampling Quadrat Count Method
+
+## 2.1 Map
+
+![](2.png)
+
+## 2.2 Table
+
+```{r results = 'asis', warning=FALSE, tidy=TRUE}
+data <- read.csv(file = "Random.csv", header = TRUE, stringsAsFactors = FALSE)
+knitr::kable(data, caption = "Random Quadrat Count Table")
+```
+
+## 2.3 Summary Report
+
+VMR for random quadrat count method is around 888.18, which is still much much greater than 1.0. Which means the points in this pattern is strongly clustered.
+
+# 3. Code
+
+```{r, results='hide', warning=FALSE, tidy=TRUE}
+##### Open Packages #####
+library(rgdal) # Bindings for the geospatial data abstraction library. Function readOGR belongs to this package.
+library(spatstat) # Spatial Point Pattern Analysis, Model-Fitting, Simulation, Tests
+library(sp)
+library(maptools)
+library(maps)
+library(graphics)
+
+##### Import Dataset #####
+getwd() # get the working directory
+list.files() # List the Files in a Directory
+OilGasLocationPA <- readOGR(dsn = "/Users/qijiawen/Desktop/2017 Spring/Spatial Data Analytics/Project 2", layer = "OilGasLocationPA") # read OilGasLocationPA shapefile
+summary(OilGasLocationPA) # get a summary # Totally there are 156259 records
+OilGasLocationPA.spatialPoints <- as(OilGasLocationPA,'SpatialPoints') # change spatial points data frame to Spatial Points
+OilGasLocationPA.ppp <- as(OilGasLocationPA.spatialPoints,'ppp') # change spatial points to spatial point pattern class ppp
+
+##### Regular Quadrat Count Method #####
+
+##### Determine The Number of Quadrats #####
+##### 10 x 10 #####
+try1 <- quadratcount(OilGasLocationPA.ppp,nx=10,ny=10) ## try 100 quardrats
+table(try1) ## aggregate the result from 0 to 15160
+mean = length(OilGasLocationPA) / 100 ## mean is 1562
+length(table(try1)) ## 67 records
+plot(OilGasLocationPA.ppp, pch = '.', main = "First Try: Regular Quadrat Count (10x10)") # plot points as background map
+plot(try1, add = TRUE, col = "red")
+              
+##### 20 x 20 #####
+try2 <- quadratcount(OilGasLocationPA.ppp,nx=20,ny=20) ## try 400 quardrats
+table(try2) ## aggregate the result from 0 to 6367
+mean = length(OilGasLocationPA) / 400 ## mean is 390
+length(table(try2)) ## 202 records                 
+plot(OilGasLocationPA.ppp, pch = '.', main = "Second Try: Regular Quadrat Count (20x20)") # plot points as background map
+plot(try2, add = TRUE, col = "red")
+
+##### 30 x 30 #####
+try3 <- quadratcount(OilGasLocationPA.ppp,nx=30,ny=30) ## try 900 quardrats
+table(try3) ## aggregate the result from 0 to 3961
+mean = length(OilGasLocationPA) / 900 ## mean is 174
+length(table(try3)) ## 323 records 
+plot(OilGasLocationPA.ppp, pch = '.', main = "Third Try: Regular Quadrat Count (30x30)") # plot points as background map
+plot(try3, add = TRUE, col = "red")
+
+##### 40 x 40 #####
+try4 <- quadratcount(OilGasLocationPA.ppp,nx=40,ny=40) ## try 1600 quardrats
+table(try4) ## aggregate the result from 0 to 2657
+mean = length(OilGasLocationPA) / 1600 ## mean is 98
+length(table(try4)) ## 363 records 
+plot(OilGasLocationPA.ppp, pch = '.', main = "Forth Try: Regular Quadrat Count (40x40)") # plot points as background map
+plot(try4, add = TRUE, col = "red")
+
+##### Map #####
+plot(OilGasLocationPA.ppp, pch = '.', main = "Regular Quadrat Count (30x30)") # plot points as background map
+RegularQuadratCount <-quadratcount(OilGasLocationPA.ppp,nx=30,ny=30) # Divides window into quadrats and counts the numbers of points in each quadrat
+plot(RegularQuadratCount, add = TRUE, col = "red") # Plot the count
+
+##### Table #####
+RegularQuadratTable <- table(RegularQuadratCount) ## aggregate and sort
+RegularQuadratTable <- as.data.frame(RegularQuadratTable) ## create the table
+colnames(RegularQuadratTable) <- c("No. of Events (K)", "No. of Quadrats(X)")
+u <- length(OilGasLocationPA) / 900 # calculate the u "mean quadrat count" 173.62
+RegularQuadratTable$`No. of Events (K)` <- as.integer(as.character(RegularQuadratTable$`No. of Events (K)`)) # change factor to integer
+RegularQuadratTable$`K-u` <- RegularQuadratTable$`No. of Events (K)` - u ## calculate k-u
+RegularQuadratTable$`(K-u)^2` <- RegularQuadratTable$`K-u`*RegularQuadratTable$`K-u` # calculate (K-u)^2
+RegularQuadratTable$`X(K-u)^2` <- RegularQuadratTable$`No. of Quadrats(X)`* RegularQuadratTable$`(K-u)^2` # calculate X(K-u)^2
+write.csv(RegularQuadratTable, "Regular.csv", row.names = FALSE)
+
+##### Summary: Calculate VMR ##### 
+RegularVariance = sum(RegularQuadratTable$`X(K-u)^2`)/(900-1) # calculate the variance s^2
+RegularVMR <- RegularVariance/u # variance mean ratio
+
+##### Random Quadrat Count Method #####
+coords <- as.data.frame(OilGasLocationPA@coords) # get the coords table
+x.max <- max(coords$coords.x1)  # max for x
+x.min <- min(coords$coords.x1)  # min for y
+y.max <- max(coords$coords.x2)  # max for y
+y.min <- min(coords$coords.x2)  # max for x
+quadratLength <- (x.max-x.min)/30 # the same length as regular
+quadratWidth <- (y.max-y.min)/30 # the same width as regular
+set.seed(1) ## to get same result, my favorite seed
+randomX <- runif(900, min = x.min, max = x.max - quadratLength) # generate 900 random x
+randomY <- runif(900, min = y.min + quadratWidth, max = y.max) # generate 900 random y
+randomQuadratCount <- matrix()
+# count the number of event for each random quadrat
+for (i in 1:900) {
+  # get four cornor coordinates
+  x.left = randomX[i]
+  x.right = randomX[i] + quadratLength
+  y.top = randomY[i]
+  y.bottom = randomY[i] - quadratWidth
+  # do filters for four sides
+  conditionLeft <- coords[coords$coords.x1 > x.left,]
+  conditionRight <- conditionLeft[conditionLeft$coords.x1 < x.right,]
+  conditionTop <- conditionRight[conditionRight$coords.x2 < y.top,] 
+  conditionBottom <- conditionTop[conditionTop$coords.x2 > y.bottom,]
+  randomQuadratCount[i] <- nrow(conditionBottom) # count number of points
+}
+
+##### Map #####
+plot(OilGasLocationPA.ppp, pch = '.', main = "Random Quadrat Count (900 rectangles)") # plot points as background map
+for (i in 1:900) {
+  rect(xleft = randomX[i], ybottom = randomY[i] - quadratWidth, xright = randomX[i] + quadratLength, ytop = randomY[i], border = "blue") ## draw rectangles
+  text(randomX[i]+0.5*quadratLength, randomY[i]-0.5*quadratWidth, randomQuadratCount[i], col = "blue", cex = 0.8) ## add count text
+}
+
+##### Table #####
+RandomCountTable <- table(randomQuadratCount) ## aggregate and sort
+RandomCountTable <- as.data.frame(RandomCountTable) ## create the table
+colnames(RandomCountTable) <- c("No. of Events (K)", "No. of Quadrats(X)")
+RandomCountTable$`No. of Events (K)` <- as.integer(as.character(RandomCountTable$`No. of Events (K)`)) # change factor to integer
+RandomCountTable$`K-u` <- RandomCountTable$`No. of Events (K)` - u ## calculate k-u
+RandomCountTable$`(K-u)^2` <- RandomCountTable$`K-u`*RandomCountTable$`K-u` # calculate (K-u)^2
+RandomCountTable$`X(K-u)^2` <- RandomCountTable$`No. of Quadrats(X)`* RandomCountTable$`(K-u)^2` # calculate X(K-u)^2
+write.csv(RandomCountTable, "Random.csv", row.names = FALSE)
+
+##### Summary: Calculate VMR #####
+RandomVariance = sum(RandomCountTable$`X(K-u)^2`)/(900-1) # calculate the variance s^2
+RandomVMR <- RandomVariance/u # variance mean ratio
+```
+
+
