@@ -1,0 +1,321 @@
+---
+title: "Final Exam"
+author: "Jiawen Qi (jiq10@pitt.edu)"
+date: "April 20, 2017"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Part A
+
+## Map
+
+## Table
+
+Perform autocorrelation on the population attribute (POP_ARR02) in “1_Neighbor1.shp” and
+“1_Neighbor2.shp” files by using Rook’s adjacency and Queen’s adjacency. Use both Moran’s I and Geary’s C to measure the level, type, significance of correlation in the attribute.
+Submit
+ A map showing the polygons and the values of the attribute used for autocorrelation in
+each file. [5 points]
+ A table summarizing the results and your comments. [25 points]
+
+# Part B
+
+## Table
+
+## IDW Map
+
+## OK Map
+
+## Discussion
+
+Use the Inverse Distance Weighting (IDW) and the Ordinary Kriging (OK) methods to
+interpolate an “Intensity” value at the center location of each polygon in “2_Community.shp” file using the sample “Intensity” values at locations (s_lat, s_long) in the same file. For IDW, use different values for r (window size) and different values for k (exponent of distance) to find the most similar map as produced by OK. Use exponential semiveriogram model for OK.
+
+Submit
+ A table summarizing the IDW results for various values of r and k and the interpolated
+values of OK at the center locations of each polygon. [10 points]
+ A map showing the IDW interpolated surface which is most similar to OK surface. [5
+points]
+ A map showing the OK interpolated surface. [5 points]
+ A report discussing the differences between the two maps, the one produced by IDW and
+the one produced by OK. Your report should include a discussion about the most suitable
+interpolation method, IDW or OK, for the given values/locations. [20 points] 
+
+# Part C
+
+## a
+
+## b
+
+## c
+
+## Report
+Obtain the following layers: P1 (“3_Area1.shp”), P2 (“3_Area2.shp”), P3 (“3_TrailPoints.shp”), and P4 (“3_State_Roads.shp”) and perform the following:
+a. Overlay P2 on P1 and find their intersection (P12), P1/= P1 - P12, and P2/= P2 - P12. Submit Maps showing P12, P1/, and P2/. [5 points]
+b. Overlay P3 on P1, P2, and P12 and find number of points within P1, P2, and P12. Submit a
+map showing the points within P1, P2, and P12. [5 points]
+c. Overlay P4 on P1, P2, and P12 and find the total length of road segments within P1, P2, and
+P12. Submit a map showing the lines within P1, P2, and P12. [5 points]
+Submit a report on the overlay results of a, b, and c. [15 points]
+
+```{r, warning=FALSE, tidy=TRUE}
+##### Load Libraries #####
+library(rgdal) # Bindings for the Geospatial Data Abstraction Library
+library(spdep) # Spatial Dependence: Weighting Schemes, Statistics and Models
+library(automap) # Automatic Interpolation Package
+library(lsa) # Latent Semantic Analysis
+library(maps) # Draw Geographical Maps
+library(rgeos) # Interface to Geometry Engine
+library(raster) # Geographic Data Analysis and Modeling
+library(gstat) # Spatial and Spatio-Temporal Geostatistical Modelling, Prediction and Simulation
+
+##### Part A #####
+
+# Import the datasets
+Neighbor1 <- readOGR(".","1_Neighbor1") # import 1_Neighbor1 shapefile
+Neighbor2 <- readOGR(".","1_Neighbor2") # import 1_Neighbor2 shapefile
+
+# Create Maps for the population attribute (POP_ARR02) for both shapefiles
+spplot(Neighbor1, "POP_ARR02", main = "Plot of Population For Neighbor1", col = "transparent") # Plot of Population for Neighbor1
+spplot(Neighbor2, "POP_ARR02", main = "Plot of Population For Neighbor2", col = "transparent") # Plot of Population for Neighbor2
+
+# Construct neighbours list from polygon list
+Neighbor1.rook <- poly2nb(Neighbor1, queen = FALSE) # neighbor1 rook
+Neighbor1.queen <- poly2nb(Neighbor1, queen = TRUE) # neighbor1 queen
+Neighbor2.rook <- poly2nb(Neighbor2, queen = FALSE) # neighbor2 rook
+Neighbor2.queen <- poly2nb(Neighbor2, queen = TRUE) # neighbor2 queen
+
+# change neighbours list to listw (get the spatial weights for neighbours lists)
+Neighbor1.rook <- nb2listw(Neighbor1.rook)
+Neighbor1.queen <- nb2listw(Neighbor1.queen)
+Neighbor2.rook <- nb2listw(Neighbor2.rook)
+Neighbor2.queen <- nb2listw(Neighbor2.queen)
+
+# Calculate Moran's I & Geary's C
+moran.test(Neighbor1$POP_ARR02, Neighbor1.rook, randomisation = FALSE)
+moran.test(Neighbor1$POP_ARR02, Neighbor1.queen, randomisation = FALSE)
+moran.test(Neighbor2$POP_ARR02, Neighbor2.rook, randomisation = FALSE)
+moran.test(Neighbor2$POP_ARR02, Neighbor2.queen, randomisation = FALSE)
+geary.test(Neighbor1$POP_ARR02, Neighbor1.rook, randomisation = FALSE)
+geary.test(Neighbor1$POP_ARR02, Neighbor1.queen, randomisation = FALSE)
+geary.test(Neighbor2$POP_ARR02, Neighbor2.rook, randomisation = FALSE)
+geary.test(Neighbor2$POP_ARR02, Neighbor2.queen, randomisation = FALSE)
+
+##### Part B #####
+
+# Import the shapefile
+Community <- readOGR(".", "2_Community") # import the data
+ControlPoints <- as.data.frame(Community@data[, c(5 : 7)]) # get the observed value at control points
+names(ControlPoints) <- c("x", "y", "z") # rename column
+row.names(ControlPoints) <- seq(1:nrow(ControlPoints)) # rename row index
+InterpolatePoints <- as.data.frame(coordinates(Community)) # get the x and y of centroids for each polygon
+names(InterpolatePoints) <- c("x", "y") # rename column
+row.names(InterpolatePoints) <- seq(1:nrow(InterpolatePoints)) # rename row index
+
+# Inverse Distance Weighting
+idw.r.k <- function(r, k) { # change r and k
+  Result.IDW <- NULL
+  for (i in 1:length(InterpolatePoints$x)) { # iterate the interpolatPoints
+    Distance <- NULL # initial the distance 
+    Distance = sqrt((InterpolatePoints$x[i]-ControlPoints$x)^2+(InterpolatePoints$y[i]-ControlPoints$y)^2) # calculate the euclidian distance
+    ControlPoints.r <- ControlPoints
+    ControlPoints.r <- cbind.data.frame(ControlPoints.r, Distance)
+    ControlPoints.r <- ControlPoints.r[ControlPoints.r$Distance <= r,] #filter the control points by r
+    ControlPoints.r$Distance.k <- ControlPoints.r$Distance^k # give the exponent k
+    ControlPoints.r$InverseDistancek <- 1/ControlPoints.r$Distance.k # inverse
+    ControlPoints.r$Weight <- ControlPoints.r$InverseDistancek / sum(ControlPoints.r$InverseDistancek) # normalize the weight
+    ControlPoints.r$WeightedValue = ControlPoints.r$Weight * ControlPoints.r$z # w*z
+    result <- sum(ControlPoints.r$WeightedValue) # get the interpolate value
+    Result.IDW <- c(Result.IDW, result) # save the result
+  }
+  return(Result.IDW)
+}
+
+# Diffrent combinations of r and k
+Result.IDW.rk1 <- idw.r.k(r = 0.7, k = 1)
+Result.IDW.rk2 <- idw.r.k(r = 1.2, k = 1)
+Result.IDW.rk3 <- idw.r.k(r = 1.7, k = 1)
+Result.IDW.rk4 <- idw.r.k(r = 0.7, k = 2)
+Result.IDW.rk5 <- idw.r.k(r = 1.2, k = 2)
+Result.IDW.rk6 <- idw.r.k(r = 1.7, k = 2)
+Result.IDW.rk7 <- idw.r.k(r = 0.7, k = 3)
+Result.IDW.rk8 <- idw.r.k(r = 1.2, k = 3)
+Result.IDW.rk9 <- idw.r.k(r = 1.7, k = 3)
+
+# Ordinary Kriging
+# Get the spatial variation by mathematical function
+# Reference: https://v8doc.sas.com/sashtml/stat/chap34/sect12.htm
+# y(d) = nugget + sill*(1-exp(-d/range))
+ControlPoints.sp = ControlPoints
+coordinates(ControlPoints.sp) = ~x+y # create control points spatial object
+ControlPoints.variogram <- autofitVariogram(z~1, ControlPoints.sp, model = "Exp") # automatically fitting a variogram 
+plot(ControlPoints.variogram) # plot the variogram: nugget = 2967, sill = 5574, range = 0.12
+# Create the gamma function
+gamma <- function(d) {
+  g = 2967 + 5574 * (1 - exp(-d/0.12))
+  return(g)
+}
+# Create the Distance Matrix D for all control points
+D <- as.data.frame(matrix(data = NA, nrow = nrow(ControlPoints), ncol = nrow(ControlPoints)))
+for (i in 1:nrow(D)) {
+  for (j in 1:nrow(D)) {
+    D[i,j] = sqrt((ControlPoints$x[i] - ControlPoints$x[j])^2 + (ControlPoints$y[i] - ControlPoints$y[j])^2) # Euclidean Distance
+  }
+}
+# Create Matrix A from D
+A <- gamma(D)
+A <- rbind.data.frame(A, 1)
+A <- cbind.data.frame(A, 1)
+diag(A) <- 0
+names(A) <- c(seq(1:13))
+A.inverse <- solve(A)
+# A loop to interpolate each point
+Result.OK <- NULL
+for (i in 1:nrow(InterpolatePoints)) {
+  d <- NULL # initial the vector d
+  d <- sqrt((InterpolatePoints$x[i]-ControlPoints$x)^2+(InterpolatePoints$y-ControlPoints$y)^2)
+  b <- c(gamma(d), 1) # calculate matrix b
+  w <- A.inverse %*% b # calculate weight matrix w
+  z <- sum(ControlPoints$z * w[1:nrow(w)-1]) # interpolate
+  Result.OK <- c(Result.OK, z)
+}
+Result.OK
+
+# IDW Interpolated Surface which is most similar to OK surface
+# I use consine similarity to determine which result is similar to OK
+cosine(Result.OK, Result.IDW.rk1) # 0.8356637
+cosine(Result.OK, Result.IDW.rk2) # 0.9607648
+cosine(Result.OK, Result.IDW.rk3) # 0.9697523
+cosine(Result.OK, Result.IDW.rk4) # 0.812111
+cosine(Result.OK, Result.IDW.rk5) # 0.8898386
+cosine(Result.OK, Result.IDW.rk6) # 0.9002952
+cosine(Result.OK, Result.IDW.rk7) # 0.804472
+cosine(Result.OK, Result.IDW.rk8) # 0.8532501
+cosine(Result.OK, Result.IDW.rk9) # 0.8611911
+# The most similar is when r = 1.7, k = 1
+# Creating the IDW interpolated Surface r = 1.7, k = 1
+ResultTable <- cbind.data.frame(InterpolatePoints, Result.IDW.rk3)
+names(ResultTable) <- c("x", "y", "z")
+IDW.map<-as.data.frame(ResultTable)
+coordinates(IDW.map)=~x+y
+xRange<-as.numeric(bbox(IDW.map)[1,])
+yRange<-as.numeric(bbox(IDW.map)[2,])
+grid<-expand.grid(x = seq(from = xRange[1], to =xRange[2], by = 0.01),
+                  y = seq(from = yRange[1],to = yRange[2], by = 0.01))
+coordinates(grid) <- ~x + y
+gridded(grid) <- TRUE
+IDW.data <- gstat::idw(ResultTable$z ~ 1, locations=IDW.map, newdata=grid)
+IDWPlot<- par(mar=c(0,0,0,0))
+image(IDW.data,"var1.pred",col=terrain.colors(50))
+contour(IDW.data,"var1.pred", add=TRUE, nlevels=10)
+plot(IDW.map, add=TRUE, pch=10, cex=0.5)
+text(coordinates(Community),
+     as.character(round(ResultTable$z,1)), 
+     pos=4, cex=0.8, col="black")
+map.axes(cex.axis=0.8)
+par(IDWPlot)
+
+# OK Interpolated Surface
+OK.result <- cbind.data.frame(InterpolatePoints, Result.OK)
+names(OK.result) <- c("x", "y", "z")
+coordinates(OK.result) = ~ x + y
+variogram <- autofitVariogram(z ~ 1, OK.result, model = "Exp")
+variogram
+plot(variogram)
+nugget = 41
+sill = 89
+range = 1.1
+model <- vgm(psill = sill, model = "Exp", range = range, nugget = nugget)
+krige <- krige(OK.result$z ~ 1, OK.result, grid, model = model)
+OKPlot <- par(mar = c(0, 0, 0, 0))
+image(krige ,"var1.pred",col=terrain.colors(50)) 
+contour(krige ,"var1.pred", add=TRUE, nlevels=10) 
+plot(OK.result, add=TRUE, pch=10, cex=0.5)
+text(coordinates(OK.result), 
+     as.character(round(OK.result$z, 1)),
+     pos=4, 
+     cex=0.8,
+     col="black")
+map.axes(cex.axis=0.8)
+par(OKPlot)
+
+##### Part C #####
+
+# Import the shapefiles
+P1 <- readOGR(".", "3_Area1")
+P2 <- readOGR(".", "3_Area2")
+P3 <- readOGR(".", "3_TrailPoints")
+P4 <- readOGR(".", "3_State_Roads")
+
+# a. Polygons Overlay
+P1@proj4string # check the coordinate system
+P2@proj4string
+P12 <- intersect(P1, P2)
+plot(P12, axes = TRUE, main = "The Intersection P12 of P1 and P2")
+P1. <- erase(P1, P12) # P1' = P1-P12
+plot(P1., axes = TRUE, main = "The Difference P1' of P1 and P12")
+P2. <- erase(P2, P12) # P2'= P2 - P12.
+plot(P2., axes = TRUE, main = "The Difference P2' of P2 and P12")
+
+# b. Points and Polygons Overlay
+P1@proj4string
+P3@proj4string # the system is not the same
+P3.new <- spTransform(P3, CRS("+proj=longlat +datum=NAD27 +no_defs +ellps=clrk66
++ +nadgrids=@conus,@alaska,@ntv2_0.gsb,@ntv1_can.dat"))
+P3.new@proj4string
+
+# P3 in P1
+P3inP1 <- intersect(P3.new, P1)
+length(P3inP1) # 428 points
+plot(P1, axes = TRUE, main = "P3 points in P1: 428")
+plot(P3inP1, add = TRUE, col = 'red', pch = 20)
+
+# P3 in P2
+P3inP2 <- intersect(P3.new, P2)
+length(P3inP2) # 566 points
+plot(P2, axes = TRUE, main = "P3 points in P2: 566")
+plot(P3inP2, add = TRUE, col = 'red', pch = 20)
+
+# P3 in P12
+P3inP12 <- intersect(P3.new, P12)
+length(P3inP12) # 281 points
+plot(P12, axes = TRUE, main = "P3 points in P12: 281")
+plot(P3inP12, add = TRUE, col = 'red', pch = 20)
+
+# Combine in one Map
+plot(P1, col = "red", main = "P3 points in P1, P2 and P12")
+plot(P2, col = "green", add = TRUE)
+plot(P12, col = "blue", add = TRUE)
+plot(P3inP1, add = TRUE, pch = 20)
+plot(P3inP2, add = TRUE, pch = 20)
+plot(P3inP12, add = TRUE, pch = 20)
+
+# Lines Polygons Overlay
+P1@proj4string
+P4@proj4string # the system is not the same
+P4.new <- spTransform(P4, CRS("+proj=longlat +datum=NAD27 +no_defs +ellps=clrk66
++ +nadgrids=@conus,@alaska,@ntv2_0.gsb,@ntv1_can.dat"))
+P4.new@proj4string
+
+# P4 in P1
+P4inP1 <- intersect(P4.new, P1)
+sum(P4inP1$SEG_LNGTH_) # 35981674
+plot(P1, main = "P4 in P1: total length: 35,981,674")
+plot(P4inP1, col = 'red', add = TRUE)
+
+# P4 in P2
+P4inP2 <- intersect(P4.new, P2)
+sum(P4inP2$SEG_LNGTH_) # 48742088
+plot(P2, main = "P4 in P2: total length: 48,742,088")
+plot(P4inP2, col = 'red', add = TRUE)
+
+# P4 in P12
+P4inP12 <- intersect(P4.new, P12)
+sum(P4inP12$SEG_LNGTH_) # 20194970
+plot(P12, main = "P4 in P12: total length: 20,194,970")
+plot(P4inP12, col = 'red', add = TRUE)
+```

@@ -1,0 +1,254 @@
+---
+title: "Project 4"
+author: "Jiawen Qi (jiq10)"
+date: "April 4, 2017"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# PART A
+
+Find the Moran’s I and Geary’s C for the areas of polygons in the `AlleghenyCounty_Council.shp` and `AlleghenyCounty_Municipal.shp` files by using Rook’s adjacency and Queen’s adjacency. In other words, the attribute of interest here is the area of polygons. Submit a table summarizing the results and their interpretation.
+
+Results Table: 建立表格并解释
+
+# PART B
+
+Perform the global G statistic on the Crime_PA2002.shp file. Submit a table summarizing the results and their interpretation.
+
+Results Table: 建立表格并解释
+
+Perform the Geographically Weighted Regression (GWR) to calculate the `total number of crimes(Index01)` as a function of `Population(Pop_CRI01)`, `Number of crime agencies(AG_CRI01)`, and `area` for Mifflin County in Crime_PA2002.shp file. Weights are based on the inverse Euclidean distance between polygons’ centroid. Submit the regression equation.
+
+# PART C
+
+Submit:
+A table showing the interpolated values and the map of interpolated surface using the IDW technique. [10 points]
+A table showing the interpolated values and the map of interpolated surface using the OK technique. [30 points]
+What are the differences between the two interpolation techniques and between the two interpolated surface maps. [10 points]
+
+# Code
+
+```{r, results='hide', warning=FALSE, tidy=TRUE}
+##### Load Libraries #####
+library(rgdal) 
+library(UScensus2010) 
+library(spdep)
+library(GWmodel) 
+library(spgwr)
+library(dplyr)
+library(fields)
+library(gstat)
+library(automap)
+
+
+##### PART A #####
+# Import files
+AlleghenyCountyCouncil <- readOGR(".","AlleghenyCounty_Council") # import AlleghenyCounty_Council shapefile
+AlleghenyCountyMunicipal <- readOGR(".","AlleghenyCounty_Municipal") # import AlleghenyCounty_Municipal shapefile
+
+# ACC is the abbr of AlleghenyCountyCouncil; ACM is the abbr of AlleghenyCountyMunicipal
+ACC.area = areaPoly(AlleghenyCountyCouncil) # calculate the area of each polygon in ACC
+ACM.area = areaPoly(AlleghenyCountyMunicipal) # calculate the area of each polygon in ACM
+
+# # construct neighbours list from polygon
+ACC.queen <- poly2nb(AlleghenyCountyCouncil, queen = TRUE) 
+ACC.rook <- poly2nb(AlleghenyCountyCouncil, queen = FALSE)
+ACM.queen <- poly2nb(AlleghenyCountyMunicipal, queen = TRUE)
+ACM.rook <- poly2nb(AlleghenyCountyMunicipal, queen = FALSE)
+
+# change neighbour list to listw (get the spatial weights for neighbours lists)
+ACC.nb2listw.queen <- nb2listw(ACC.queen)
+ACC.nb2listw.rook <- nb2listw(ACC.rook)
+ACM.nb2listw.queen <- nb2listw(ACM.queen)
+ACM.nb2listw.rook <- nb2listw(ACM.rook)
+
+# calculate moran's and geary'c
+moran.test(ACC.area, ACC.nb2listw.queen, randomisation = FALSE) # ACC moran queen: 0.31108273, Expectation = -0.08333333
+moran.test(ACC.area, ACC.nb2listw.rook, randomisation = FALSE) # ACC moran rook: 0.31108273, Expectation = -0.08333333
+geary.test(ACC.area, ACC.nb2listw.queen, randomisation = FALSE) # ACC geary queen: 0.6409275, Expectation = 1;
+geary.test(ACC.area, ACC.nb2listw.rook, randomisation = FALSE) # ACC geary rook: 0.6409275, Expectation = 1;
+moran.test(ACM.area, ACM.nb2listw.queen, randomisation = FALSE) # ACM moran queen: -0.0001232697, Expectation = -0.007751938;
+moran.test(ACM.area, ACM.nb2listw.rook, randomisation = FALSE) # ACM moran rook: -0.002915556, Expectation = -0.007751938
+geary.test(ACM.area, ACM.nb2listw.queen, randomisation = FALSE) # ACM geary queen: 2.09170840, Expectation = 1;
+geary.test(ACM.area, ACM.nb2listw.rook, randomisation = FALSE) # ACM geary rook: 2.134989922, Expectation = 1;
+
+##### PART B #####
+# Import dataset Crime_PA2002 shapefile
+Crime_PA2002 <- readOGR(".","Crime_PA2002")
+
+# Construct neighbours list from polygon list
+Crime_PA2002.rook <- poly2nb(Crime_PA2002, queen = FALSE) # rook
+
+# Spatial Weights for neighbours lists
+Crime_PA2002.rook.nb2listw <- nb2listw(Crime_PA2002.rook)
+
+##### Global G statistics
+globalG.test(Crime_PA2002$BURG01, Crime_PA2002.rook.nb2listw) # Global G statistic: 2.974714e-02 ; Expectation: 1.515152e-02; Variance: 1.600546e-05
+
+##### GWR
+# Get the Euclidian Distance weight Matrix for all combinations
+DistanceMatrix <- gw.dist(dp.locat=coordinates(Crime_PA2002)) # the euclidian distance matrix
+DistanceMatrixMifflin <- DistanceMatrix[61,]
+DistanceMatrixMifflin <- DistanceMatrixMifflin[-61]
+weight <- 1/DistanceMatrixMifflin
+weight
+
+# spgwr package gwr
+bw <-gwr.sel(INDEX01 ~ POP_CRI01 + AG_CRI01 + Area, data = Crime_PA2002[Crime_PA2002$COUNTY != 'Mifflin County',])
+gwr.model <- gwr(INDEX01~POP_CRI01+AG_CRI01+Area, data = Crime_PA2002[Crime_PA2002$COUNTY != 'Mifflin County',], bandwidth=bw, hatmatrix = TRUE, se.fit = TRUE, weights = weight)
+gwr.model
+x <- gwr(INDEX01~POP_CRI01+AG_CRI01+Area, data = Crime_PA2002, bandwidth = bw, predict=TRUE, se.fit=TRUE, fittedGWRobject=gwr.model)
+x$SDF$pred[61] # the predict result
+
+##### PART C #####
+PA_County_Select <- readOGR(".","PA_County_Select")
+Ozone_Value <- read.delim("Ozone_Value.dat", header = FALSE, sep = "|")
+Ozone_Sensor_Locs <- readOGR(".", "Ozone_Sensor_Locs")
+PA_County_Select@data$COUNTY<-as.character(PA_County_Select@data$COUNTY)
+names(Ozone_Value)[3]<-"id"
+
+## Inverse Distance Weighting (IDW)
+centroids <- as.data.frame(coordinates(PA_County_Select)) # get the centroids for each county
+names(centroids) <- c("centroidX", "centroidY") # rename the column name
+rownames(centroids) <- seq(1:length(centroids$centroidX)) # rename the row index
+ControlPoints <- cbind.data.frame(Ozone_Sensor_Locs$id,Ozone_Sensor_Locs$long, Ozone_Sensor_Locs$lat) # get all the points long and lat that would be the control points
+names(ControlPoints) <- c("id","controlX", "controlY") # rename the column names
+Sub_Ozone_Value <- Ozone_Value[Ozone_Value$id %in% ControlPoints$id, c(3, 6, 8)] # get the ozone value with the same id in the control points
+# Create the IDW calculation table in loop and record the results
+Sub_Ozone_Value <- Sub_Ozone_Value[Sub_Ozone_Value$V6 == "OZONE",-2] # get the ozone value
+ControlPoints$id <- as.character(ControlPoints$id) # change id to char
+Sub_Ozone_Value$id <- as.character(Sub_Ozone_Value$id) # change id to char
+ControlPoints <- inner_join(ControlPoints, Sub_Ozone_Value) # Join to get the ozone value for each sensor station
+names(ControlPoints)[4] <- "ozone_value"
+ResultTable <- as.data.frame(PA_County_Select@data$COUNTY) # This Table will record the results
+ResultTable$x <- centroids$centroidX # long of centroid for each polygon
+ResultTable$y <- centroids$centroidY # lat of centroid for each polygon
+ResultTable$z <- NA # interpolated ozone value
+# using for loop to interpolate for each polygon
+for (i in 1:length(centroids$centroidX)) {
+  centroidX <- ResultTable$x[i]
+  centroidY <- ResultTable$y[i]
+  IDWtable <- ControlPoints
+  IDWtable$Distance <- sqrt((IDWtable$controlX-centroidX)^2+(IDWtable$controlY-centroidY)^2)
+  IDWtable <- IDWtable[order(IDWtable$Distance),]
+  rownames(IDWtable) <- seq(1:length(IDWtable$id))
+  IDWtable <- IDWtable[1:5,] # keep only 5 nearest
+  IDWtable$InverseDistance <- 1/IDWtable$Distance
+  IDWtable$Weight <- IDWtable$InverseDistance/sum(IDWtable$InverseDistance)
+  IDWtable$WeightedValue <- IDWtable$Weight*IDWtable$ozone_value
+  ResultTable$z[i] <- sum(IDWtable$WeightedValue)
+}
+ResultTable <- ResultTable[,-1]
+ResultTable
+
+# Create the IDW Map
+IDW.map<-as.data.frame(ResultTable)
+coordinates(IDW.map)=~x+y
+xRange<-as.numeric(bbox(IDW.map)[1,])
+yRange<-as.numeric(bbox(IDW.map)[2,])
+grid<-expand.grid(x = seq(from = xRange[1], to =xRange[2], by = 0.01),
+                  y = seq(from = yRange[1],to = yRange[2], by = 0.01))
+coordinates(grid) <- ~x + y
+gridded(grid) <- TRUE
+IDW.data <- gstat::idw(ResultTable$z ~ 1, locations=IDW.map, newdata=grid)
+OzonePlot<- par(mar=c(0,0,0,0))
+image(IDW.data,"var1.pred",col=terrain.colors(50))
+contour(IDW.data,"var1.pred", add=TRUE, nlevels=10)
+plot(IDW.map, add=TRUE, pch=10, cex=0.5)
+text(coordinates(PA_County_Select),
+     paste(as.character(round(ResultTable$z,1)),
+           as.character(PA_County_Select$COUNTY) ), 
+     pos=4, cex=0.8, col="black")
+map.axes(cex.axis=0.8)
+par(OzonePlot)
+
+## Ordinary Kriging (OK) 
+Ozone_Value <- Ozone_Value[Ozone_Value$V6 == 'OZONE', ] # get all the ozone value
+Ozone_Sensor_Locs_data <- Ozone_Sensor_Locs@data
+Ozone_Sensor_Locs_data$id <- as.character(Ozone_Sensor_Locs_data$id)
+Ozone_Value$id <- as.character(Ozone_Value$id)
+Ozone_Sensor_Value <- inner_join(x = Ozone_Sensor_Locs_data, y = Ozone_Value) # join by id
+Sensor.num <- nrow(Ozone_Sensor_Value) # there are 11 sensors has value
+Ozone_Sensor_Value <- subset.data.frame(Ozone_Sensor_Value, select = c(long, lat, V8))
+names(Ozone_Sensor_Value) <- c('x', 'y', 'z')
+centroids$z <- NA # create the new column z to store the ozone value
+names(centroids) <- c('x', 'y', 'z')
+dataset <- rbind.data.frame(Ozone_Sensor_Value, centroids)
+
+# Create matrix D of distance between control points
+D <- as.data.frame(matrix(data = NA, nrow = Sensor.num, ncol = Sensor.num))
+names(D) <- c(1:nrow(D))
+for (i in 1:nrow(D)) {
+  for (j in 1:nrow(D)) {
+    D[i,j] = sqrt((Ozone_Sensor_Value$x[i] - Ozone_Sensor_Value$x[j])^2 + (Ozone_Sensor_Value$y[i] - Ozone_Sensor_Value$y[j])^2)
+  }
+}
+
+# exponential semivariogram model
+variogram = Ozone_Sensor_Value 
+coordinates(variogram) = ~x + y 
+variogram <- autofitVariogram(z~x+y, variogram, model="Exp") # exponential
+plot(variogram) # sill is 15, range is 0.11, nugget is 14
+a <- 0.11 # range
+c <- 15 # sill
+n <- 14
+gamma <- function(d) {
+  g <- n + (c - n) * (1-exp(-d/a))
+  return(g)
+}
+
+# get Matrix A
+A <- gamma(D)
+A <- rbind.data.frame(A, 1)
+A <- cbind.data.frame(A, 1)
+diag(A) <- 0
+names(A) <- c(seq(1:12))
+A.inverse <- solve(A)
+
+for (i in 1:10) { # for each centroid
+  # get vector d, d
+  d <- c()
+  for (j in 1:11) { # for each control point
+    distance <- sqrt((centroids$x[i] - Ozone_Sensor_Value$x[j]) ^ 2 + (centroids$y[i] - Ozone_Sensor_Value$y[j]) ^ 2)
+    d <- c(d, distance)
+  }
+  # get vector b
+  b <- c(gamma(d),1)
+  # get the weight w
+  w = A.inverse %*% b
+  z.estimate <- sum(ControlPoints$ozone_value * w[1:11])
+  centroids$z[i] = z.estimate
+}
+centroids
+
+# create the OK map  // parameters
+OK.result <- as.data.frame(centroids)
+coordinates(OK.result) = ~ x + y
+variogram <- autofitVariogram(z ~ x + y, OK.result, model = "Exp")
+variogram
+plot(variogram)
+nugget = 0.01
+sill = 0.02
+range = 0.17
+model <- vgm(psill = sill, model = "Exp", range = range, nugget = nugget)
+krige <- krige(OK.result$z ~ 1, OK.result, grid, model = model) # using ordinary kriging
+OzonePlot2 <- par(mar = c(0, 0, 0, 0))
+image(krige ,"var1.pred",col=terrain.colors(50)) 
+contour(krige ,"var1.pred", add=TRUE, nlevels=10) 
+plot(OK.result, add=TRUE, pch=10, cex=0.5)
+text(coordinates(OK.result), 
+     paste(as.character(round(OK.result$z, 1)),
+           as.character(PA_County_Select$COUNTY)), 
+     pos=4, 
+     cex=0.8,
+     col="black")
+map.axes(cex.axis=0.8)
+par(OzonePlot2)
+
+
+
+```
